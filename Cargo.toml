@@ -5,11 +5,11 @@ authors = ["aemino <aeminodev@gmail.com>"]
 edition = "2018"
 
 [dependencies]
-anyhow = "1.0.35"
-ron = "0.6.2"
+anyhow = "1.0.37"
+ron = "0.6.4"
 serde = { version = "1.0.118", features = ["derive"] }
-serenity = { git = "https://github.com/serenity-rs/serenity", branch = "current", features = ["collector"] }
-tokio = { version = "0.2", features = ["macros"] }
+serenity = { version = "0.10.0", features = ["collector"] }
+tokio = { version = "1.0.1", features = ["macros", "rt-multi-thread"] }
 tracing = "0.1.22"
 tracing-futures = "0.2.4"
 tracing-subscriber = "0.2.15"
