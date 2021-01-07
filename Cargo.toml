@@ -1,0 +1,15 @@
+[package]
+name = "mun-relay"
+version = "0.1.0"
+authors = ["aemino <aeminodev@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+anyhow = "1.0.35"
+ron = "0.6.2"
+serde = { version = "1.0.118", features = ["derive"] }
+serenity = { git = "https://github.com/serenity-rs/serenity", branch = "current", features = ["collector"] }
+tokio = { version = "0.2", features = ["macros"] }
+tracing = "0.1.22"
+tracing-futures = "0.2.4"
+tracing-subscriber = "0.2.15"

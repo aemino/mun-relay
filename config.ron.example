@@ -1,0 +1,14 @@
+Config(
+    token: "your bot's token",
+    guild_id: "",
+    delegate_role_id: "",
+    staff_role_id: "",
+    chair_role_id: "",
+    committees: [
+        (
+            name: "Example Committee",
+            role_id: "",
+            channel_id: "",
+        ),
+    ],
+)
