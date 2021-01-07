@@ -145,11 +145,7 @@ async fn forward(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
                 let members = delegate_member
                     .guild_id
                     .members(ctx, None, None)
-                    .await
-                    .map_err(|err| {
-                        println!("{}", err);
-                        err
-                    })?;
+                    .await?;
 
                 match members
                     .iter()
