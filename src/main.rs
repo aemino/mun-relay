@@ -3,17 +3,14 @@ use std::{collections::HashSet, fs::File, sync::Arc, time::Duration};
 use anyhow::{Context as _, Result};
 use serenity::{
     async_trait,
+    client::bridge::gateway::{ChunkGuildFilter, GatewayIntents},
     framework::standard::{
         macros::{command, group},
         Args, CommandResult, StandardFramework,
     },
     futures::StreamExt,
     http::Http,
-    model::{
-        channel::Message,
-        gateway::Ready,
-        id::{RoleId, UserId},
-    },
+    model::{channel::Message, gateway::Ready, id::RoleId},
     prelude::*,
     utils::{content_safe, ContentSafeOptions, MessageBuilder},
 };
@@ -37,9 +34,53 @@ struct Handler;
 
 #[async_trait]
 impl EventHandler for Handler {
-    async fn ready(&self, _: Context, ready: Ready) {
+    async fn ready(&self, ctx: Context, ready: Ready) {
         info!("{} is connected!", ready.user.name);
     }
+}
+
+// Simple `split_once` "polyfill" since it's currently unstable.
+fn split_once(text: &str, pat: char) -> Option<(&str, &str)> {
+    let mut iter = text.splitn(2, pat);
+    Some((iter.next()?, iter.next()?))
+}
+
+async fn parse_name_and_discriminator(
+    args: &mut Args,
+) -> Option<Result<(String, u16), &'static str>> {
+    let mut name = String::new();
+
+    while let Some(mut arg) = args.current() {
+        if name.is_empty() {
+            match arg.strip_prefix('@') {
+                Some(trimmed) => arg = trimmed,
+                None => {
+                    args.restore();
+                    return None;
+                }
+            }
+        }
+
+        match split_once(arg, '#') {
+            Some((name_tail, discriminator_str)) => {
+                name.push_str(name_tail);
+
+                match discriminator_str.parse() {
+                    Ok(discriminator) if (1..=9999).contains(&discriminator) => {
+                        return Some(Ok((name, discriminator)))
+                    }
+                    _ => return Some(Err("invalid discriminator")),
+                }
+            }
+            None => name.push_str(arg),
+        }
+
+        args.advance();
+    }
+
+    Some(Err(
+        "invalid format; mention should be in the form `@username#discriminator`",
+    ))
 }
 
 #[group("relay")]
@@ -98,7 +139,50 @@ async fn forward(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
         .await
         .expect("failed to find committee channel");
 
-    let recipient_id = args.single::<UserId>().ok();
+    let recipient_id = match parse_name_and_discriminator(&mut args).await {
+        Some(res) => match res {
+            Ok((name, discriminator)) => {
+                let members = delegate_member
+                    .guild_id
+                    .members(ctx, None, None)
+                    .await
+                    .map_err(|err| {
+                        println!("{}", err);
+                        err
+                    })?;
+
+                match members
+                    .iter()
+                    .map(|member| &member.user)
+                    .find(|&user| user.name == name && user.discriminator == discriminator)
+                    .map(|user| user.id)
+                {
+                    Some(id) => Some(id),
+                    None => {
+                        msg.channel_id
+                            .say(ctx, "Sorry, I couldn't find that user.")
+                            .await?;
+
+                        return Ok(());
+                    }
+                }
+            }
+            Err(err) => {
+                msg.channel_id
+                    .say(
+                        ctx,
+                        format!(
+                            "Sorry, I couldn't understand your mention. Problem: `{}`",
+                            err
+                        ),
+                    )
+                    .await?;
+
+                return Ok(());
+            }
+        },
+        None => None,
+    };
     let is_external = recipient_id.is_some();
 
     let cleaned_content = content_safe(ctx, args.rest(), &ContentSafeOptions::default()).await;
@@ -128,7 +212,7 @@ async fn forward(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
                     ""
                 })
                 .push(format!(
-                    "Reply to this message{}to send a response.",
+                    " Reply to this message{}to send a response.",
                     if is_external { " after voting " } else { " " }
                 ))
                 .build(),
@@ -385,9 +469,18 @@ async fn main() -> Result<()> {
     let mut client = Client::builder(config.token())
         .event_handler(Handler)
         .framework(framework)
+        .intents(
+            GatewayIntents::DIRECT_MESSAGES
+                | GatewayIntents::DIRECT_MESSAGE_TYPING
+                | GatewayIntents::DIRECT_MESSAGE_REACTIONS
+                | GatewayIntents::GUILDS
+                | GatewayIntents::GUILD_MESSAGES
+                | GatewayIntents::GUILD_MESSAGE_TYPING
+                | GatewayIntents::GUILD_MESSAGE_REACTIONS
+                | GatewayIntents::GUILD_MEMBERS,
+        )
         .await
         .context("failed to create client")?;
-
     {
         let mut data = client.data.write().await;
         data.insert::<ConfigContainer>(Arc::new(config));
