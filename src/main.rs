@@ -3,7 +3,7 @@ use std::{collections::HashSet, fs::File, sync::Arc, time::Duration};
 use anyhow::{Context as _, Result};
 use serenity::{
     async_trait,
-    client::bridge::gateway::{ChunkGuildFilter, GatewayIntents},
+    client::bridge::gateway::GatewayIntents,
     framework::standard::{
         macros::{command, group},
         Args, CommandResult, StandardFramework,
@@ -34,7 +34,7 @@ struct Handler;
 
 #[async_trait]
 impl EventHandler for Handler {
-    async fn ready(&self, ctx: Context, ready: Ready) {
+    async fn ready(&self, _: Context, ready: Ready) {
         info!("{} is connected!", ready.user.name);
     }
 }
@@ -50,18 +50,20 @@ async fn parse_name_and_discriminator(
 ) -> Option<Result<(String, u16), &'static str>> {
     let mut name = String::new();
 
-    while let Some(mut arg) = args.current() {
+    while let Ok(arg) = args.single::<String>() {
+        let mut fragment = arg.as_str();
+
         if name.is_empty() {
-            match arg.strip_prefix('@') {
-                Some(trimmed) => arg = trimmed,
+            match fragment.strip_prefix('@') {
+                Some(trimmed) => fragment = trimmed,
                 None => {
-                    args.restore();
+                    args.rewind();
                     return None;
                 }
             }
         }
 
-        match split_once(arg, '#') {
+        match split_once(fragment, '#') {
             Some((name_tail, discriminator_str)) => {
                 name.push_str(name_tail);
 
@@ -72,10 +74,8 @@ async fn parse_name_and_discriminator(
                     _ => return Some(Err("invalid discriminator")),
                 }
             }
-            None => name.push_str(arg),
+            None => name.push_str(fragment),
         }
-
-        args.advance();
     }
 
     Some(Err(
@@ -142,10 +142,7 @@ async fn forward(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
     let recipient_id = match parse_name_and_discriminator(&mut args).await {
         Some(res) => match res {
             Ok((name, discriminator)) => {
-                let members = delegate_member
-                    .guild_id
-                    .members(ctx, None, None)
-                    .await?;
+                let members = delegate_member.guild_id.members(ctx, None, None).await?;
 
                 match members
                     .iter()
