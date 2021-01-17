@@ -286,7 +286,7 @@ async fn forward(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
             committee_msg
                 .reply(
                     ctx,
-                    format!("No consensus reached; rejecting request."),
+                    "No consensus reached; rejecting request.",
                 )
                 .await?;
 
