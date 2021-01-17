@@ -22,7 +22,7 @@ mod types;
 const POSITIVE_REACTION: char = '✅';
 const NEGATIVE_REACTION: char = '❌';
 const SENT_REACTION: char = '📨';
-const REACTION_TIMEOUT: Duration = Duration::from_secs(10 * 60);
+const REACTION_TIMEOUT: Duration = Duration::from_secs(30 * 60);
 
 struct ConfigContainer;
 
@@ -200,13 +200,13 @@ async fn forward(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
                 .push_quote_line(cleaned_content.clone())
                 .push_line("")
                 .push(if is_external {
-                    "Use the reactions below to approve or deny this request."
+                    "Use the reactions below to approve or deny this request. "
                 } else {
                     ""
                 })
                 .push(format!(
-                    " Reply to this message{}to send a response.",
-                    if is_external { " after voting " } else { " " }
+                    "Reply to this message within the next {} minutes{}to send a response.",
+                    REACTION_TIMEOUT.as_secs() / 60, if is_external { " after voting " } else { " " }
                 ))
                 .build(),
         )
@@ -281,10 +281,12 @@ async fn forward(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
                 }
             }
         } else {
+            committee_msg.delete_reactions(ctx).await?;
+
             committee_msg
                 .reply(
                     ctx,
-                    "No consensus reached in 10 minutes; rejecting request.",
+                    format!("No consensus reached; rejecting request."),
                 )
                 .await?;
 
